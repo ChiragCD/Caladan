@@ -23,6 +23,8 @@
 #include <runtime/rcu.h>
 #include <runtime/preempt.h>
 
+// #define ORIGINAL_ALGO
+#define PRIORITY_FCFS
 
 /*
  * constant limits
@@ -38,6 +40,10 @@
 #define RUNTIME_SCHED_MIN_POLL_US	2
 #define RUNTIME_WATCHDOG_US		50
 #define RUNTIME_RX_BATCH_SIZE		32
+
+
+
+#define RUNTIME_RHEAP_SIZE      1024
 
 
 /*
@@ -385,8 +391,13 @@ struct kthread {
 	struct lrpc_chan_out	txpktq;
 	struct lrpc_chan_out	txcmdq;
 
+#ifdef ORIGINAL_ALGO
 	/* 4th-7th cache-line */
 	thread_t		*rq[RUNTIME_RQ_SIZE];
+#endif
+#ifdef PRIORITY_FCFS
+    thread_t        *rheap[RUNTIME_RHEAP_SIZE];
+#endif
 
 	/* 8th cache-line */
 	spinlock_t		timer_lock;

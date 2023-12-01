@@ -323,6 +323,10 @@ static __noreturn __noinline void schedule(void)
 	unsigned int iters = 0;
 	int i, sibling;
 
+#ifdef PRIORITY_FCFS
+    int runtime_schedule_type = 1;
+#endif
+
 	assert_spin_lock_held(&l->lock);
 	assert(l->parked == false);
 
