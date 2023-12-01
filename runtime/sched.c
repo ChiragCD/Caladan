@@ -323,6 +323,29 @@ static __noinline bool do_watchdog(struct kthread *l)
 	return work;
 }
 
+thread_t * pop_heap() {
+    struct kthread *l = myk();
+    assert(l->rheap_size != 0);
+    thread_t * best = l->rheap[0];
+    l->rheap_size--;
+    l->rheap[0] = l->rheap[l->rheap_size];
+    int index = 0;
+    thread_t * curr = l->rheap[index];
+    int left = 2*index+1;
+    int right = 2*index+2;
+    int new_ind;
+    while((left < RUNTIME_RHEAP_SIZE) && (right < RUNTIME_RHEAP_SIZE) &&
+            (curr->ready_tsc > l->rheap[left]->ready_tsc || curr->ready_tsc > l->rheap[right]->ready_tsc)) {
+        if(l->rheap[left]->ready_tsc < l->rheap[right]->ready_tsc) new_ind = left;
+        else new_ind = right;
+        l->rheap[index] = l->rheap[new_ind];
+        l->rheap[new_ind] = curr;
+        index = new_ind;
+        curr = l->rheap[new_ind];
+    }
+    return best;
+}
+
 /* the main scheduler routine, decides what to run next */
 static __noreturn __noinline void schedule(void)
 {
@@ -384,6 +407,7 @@ static __noreturn __noinline void schedule(void)
 			goto done;
 	}
 
+#ifdef ORIGINAL_ALGO
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&l->rq_overflow)))
 		drain_overflow(l);
@@ -391,6 +415,10 @@ static __noreturn __noinline void schedule(void)
 	/* first try the local runqueue */
 	if (l->rq_head != l->rq_tail)
 		goto done;
+#elif defined(PRIORITY_FCFS)
+    if(l->rheap_size != 0)
+        goto done;
+#endif
 
 again:
 
@@ -403,6 +431,7 @@ again:
 		goto done;
 	}
 
+#ifdef ORIGINAL_ALGO
 	/* then try to steal from a sibling kthread */
 	sibling = cpu_map[l->curr_cpu].sibling_core;
 	r = cpu_map[sibling].recent_kthread;
@@ -416,6 +445,7 @@ again:
 		if (ks[idx] != l && steal_work(l, ks[idx]))
 			goto done;
 	}
+#endif
 
 	/* recheck for local softirqs one last time */
 	if (softirq_run_locked(l)) {
@@ -462,6 +492,8 @@ done:
 		drain_overflow(l);
 
 	update_oldest_tsc(l);
+#elif defined(PRIORITY_FCFS)
+    th = pop_heap();
 #endif
 	spin_unlock(&l->lock);
 
@@ -592,7 +624,13 @@ static void thread_ready_prepare(struct kthread *k, thread_t *th)
 
 	/* prepare thread to be runnable */
 	th->thread_ready = true;
+
+#ifdef ORIGINAL_ALGO
 	th->ready_tsc = rdtsc();
+#endif
+#ifdef PRIORITY_FCFS
+    th->ready_tsc = (th->priority << 60) || (rdtsc() >> 4);
+#endif
 	if (cores_have_affinity(th->last_cpu, k->curr_cpu))
 		STAT(LOCAL_WAKES)++;
 	else
@@ -619,6 +657,7 @@ void thread_ready_locked(thread_t *th)
 		drain_overflow(k);
 
 	thread_ready_prepare(k, th);
+#ifdef ORIGINAL_ALGO
 	if (unlikely(k->rq_head - k->rq_tail >= RUNTIME_RQ_SIZE)) {
 		assert(k->rq_head - k->rq_tail == RUNTIME_RQ_SIZE);
 		list_add_tail(&k->rq_overflow, &th->link);
@@ -627,11 +666,12 @@ void thread_ready_locked(thread_t *th)
 		return;
 	}
 
-#ifdef ORIGINAL_ALGO
 	k->rq[k->rq_head++ % RUNTIME_RQ_SIZE] = th;
 	if (k->rq_head - k->rq_tail == 1)
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
+#elif defined(PRIORITY_FCFS)
+    insert_heap(th);
 #endif
 }
 
@@ -668,6 +708,35 @@ void thread_ready_head_locked(thread_t *th)
 #endif
 }
 
+// Whether a is to be prioritized over b
+int higher_priority_than(thread_t * a, thread_t * b) {
+    if(!a) return 0;
+    if(!b) return 1;
+    if(a->ready_tsc < b->ready_tsc) return 1;
+    return 0;
+}
+
+void insert_heap(thread_t *th) {
+	struct kthread *k = getk();
+    if(k->rheap_size == RUNTIME_RHEAP_SIZE) {
+        // Drop, only if overflow and lower priority than last
+        if(th->ready_tsc >= k->rheap[RUNTIME_RHEAP_SIZE-1]->ready_tsc) return;
+    } else {
+        k->rheap_size++;
+    }
+    k->rheap[k->rheap_size-1] = th;
+    int index = k->rheap_size-1;
+    thread_t * parent = NULL;
+    while(index > 0) {
+        parent = k->rheap[index/2];
+        if(!parent || higher_priority_than(k->rheap[index], parent)) {
+            k->rheap[index/2] = k->rheap[index];
+            k->rheap[index] = parent;
+        }
+        index /= 2;
+    }
+}
+
 /**
  * thread_ready - makes a uthread runnable (at the tail of the queue)
  * @th: the thread to mark runnable
@@ -681,6 +750,8 @@ void thread_ready(thread_t *th)
 
 	k = getk();
 	thread_ready_prepare(k, th);
+
+#ifdef ORIGINAL_ALGO
 	rq_tail = load_acquire(&k->rq_tail);
 	if (unlikely(k->rq_head - rq_tail >= RUNTIME_RQ_SIZE ||
 	             !list_empty_volatile(&k->rq_overflow))) {
@@ -694,13 +765,13 @@ void thread_ready(thread_t *th)
 		STAT(RQ_OVERFLOW)++;
 		return;
 	}
-
-#ifdef ORIGINAL_ALGO
 	k->rq[k->rq_head % RUNTIME_RQ_SIZE] = th;
 	store_release(&k->rq_head, k->rq_head + 1);
 	if (k->rq_head - load_acquire(&k->rq_tail) == 1)
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
+#elif defined(PRIORITY_FCFS)
+    insert_heap(th);
 #endif
 	putk();
 }
@@ -729,6 +800,9 @@ void thread_ready_head(thread_t *th)
 		k->rq_head--;
 		STAT(RQ_OVERFLOW)++;
 	}
+#elif defined(PRIORITY_FCFS)
+    th->ready_tsc = 0;
+    insert_heap(th);
 #endif
 	spin_unlock(&k->lock);
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;

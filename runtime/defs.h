@@ -43,7 +43,7 @@
 
 
 
-#define RUNTIME_RHEAP_SIZE      1024
+#define RUNTIME_RHEAP_SIZE      1023
 
 
 /*
@@ -395,9 +395,6 @@ struct kthread {
 	/* 4th-7th cache-line */
 	thread_t		*rq[RUNTIME_RQ_SIZE];
 #endif
-#ifdef PRIORITY_FCFS
-    thread_t        *rheap[RUNTIME_RHEAP_SIZE];
-#endif
 
 	/* 8th cache-line */
 	spinlock_t		timer_lock;
@@ -419,6 +416,12 @@ struct kthread {
 
 	/* 10th cache-line, statistics counters */
 	uint64_t		stats[STAT_NR];
+
+#ifdef PRIORITY_FCFS
+    uint32_t        priority;
+    int             rheap_size;
+    thread_t        *rheap[RUNTIME_RHEAP_SIZE];
+#endif
 };
 
 // /* compile-time verification of cache-line alignment */
