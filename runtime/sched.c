@@ -346,6 +346,7 @@ thread_t * pop_heap() {
     }
     return best;
 #endif
+    return NULL;
 }
 
 // Whether a is to be prioritized over b
@@ -388,10 +389,6 @@ static __noreturn __noinline void schedule(void)
 	unsigned int start_idx;
 	unsigned int iters = 0;
 	int i, sibling;
-
-#ifdef PRIORITY_FCFS
-    int runtime_schedule_type = 1;
-#endif
 
 	assert_spin_lock_held(&l->lock);
 	assert(l->parked == false);
@@ -566,7 +563,10 @@ static __always_inline void enter_schedule(thread_t *curth)
 	now_tsc = rdtsc();
 
 	/* slow path: switch from the uthread stack to the runtime stack */
-	if (k->rq_head == k->rq_tail ||
+	if (
+#ifdef ORIGINAL_ALGO
+        k->rq_head == k->rq_tail ||
+#endif
 	    preempt_cede_needed(k) ||
 #ifdef GC
 	    get_gc_gen() != k->local_gc_gen ||
