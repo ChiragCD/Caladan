@@ -145,6 +145,7 @@ static __noreturn void jmp_runtime_nosave(runtime_fn_t fn)
 
 static void drain_overflow(struct kthread *l)
 {
+#ifdef ORIGINAL_ALGO
 	thread_t *th;
 
 	assert_spin_lock_held(&l->lock);
@@ -156,6 +157,7 @@ static void drain_overflow(struct kthread *l)
 			break;
 		l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
 	}
+#endif
 }
 
 static bool work_available(struct kthread *k, uint64_t now_tsc)
@@ -173,6 +175,7 @@ static bool work_available(struct kthread *k, uint64_t now_tsc)
 
 static void update_oldest_tsc(struct kthread *k)
 {
+#ifdef ORIGINAL_ALGO
 	thread_t *th;
 
 	assert_spin_lock_held(&k->lock);
@@ -182,11 +185,13 @@ static void update_oldest_tsc(struct kthread *k)
 		th = k->rq[k->rq_tail % RUNTIME_RQ_SIZE];
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	}
+#endif
 }
 
 /* drain up to nr threads from k's runqueue into list l */
 static uint32_t drain_threads(struct kthread *k, struct list_head *l, uint32_t nr, bool update_tail)
 {
+#ifdef ORIGINAL_ALGO
 	uint32_t i, rq_head, rq_tail;
 	thread_t *th;
 
@@ -210,10 +215,14 @@ static uint32_t drain_threads(struct kthread *k, struct list_head *l, uint32_t n
 	}
 
 	return i;
+#else 
+    return 0;
+#endif
 }
 
 static void merge_runqueues(struct kthread *l, uint32_t lsize, struct kthread *r, uint32_t rsize)
 {
+#ifdef ORIGINAL_ALGO
 	struct list_head l_ths, r_ths;
 	thread_t *th, *cur_l, *cur_r;
 	uint32_t i;
@@ -256,6 +265,7 @@ static void merge_runqueues(struct kthread *l, uint32_t lsize, struct kthread *r
 
 	ACCESS_ONCE(l->q_ptrs->rq_head) += rsize;
 	update_oldest_tsc(l);
+#endif
 }
 
 static bool steal_work(struct kthread *l, struct kthread *r)
@@ -442,6 +452,7 @@ again:
 
 done:
 	/* pop off a thread and run it */
+#ifdef ORIGINAL_ALGO
 	assert(l->rq_head != l->rq_tail);
 	th = l->rq[l->rq_tail++ % RUNTIME_RQ_SIZE];
 	ACCESS_ONCE(l->q_ptrs->rq_tail)++;
@@ -451,6 +462,7 @@ done:
 		drain_overflow(l);
 
 	update_oldest_tsc(l);
+#endif
 	spin_unlock(&l->lock);
 
 	/* update exit stat counters */
@@ -506,6 +518,7 @@ static __always_inline void enter_schedule(thread_t *curth)
 	perthread_get_stable(last_tsc) = now_tsc;
 
 	/* pop the next runnable thread from the queue */
+#ifdef ORIGINAL_ALGO
 	th = k->rq[k->rq_tail++ % RUNTIME_RQ_SIZE];
 	ACCESS_ONCE(k->q_ptrs->rq_tail)++;
 
@@ -514,6 +527,7 @@ static __always_inline void enter_schedule(thread_t *curth)
 		drain_overflow(k);
 
 	update_oldest_tsc(k);
+#endif
 	spin_unlock(&k->lock);
 
 	/* update exported thread run start time */
@@ -613,10 +627,12 @@ void thread_ready_locked(thread_t *th)
 		return;
 	}
 
+#ifdef ORIGINAL_ALGO
 	k->rq[k->rq_head++ % RUNTIME_RQ_SIZE] = th;
 	if (k->rq_head - k->rq_tail == 1)
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
+#endif
 }
 
 /**
@@ -637,6 +653,7 @@ void thread_ready_head_locked(thread_t *th)
 
 	thread_ready_prepare(k, th);
 
+#ifdef ORIGINAL_ALGO
 	if (k->rq_head != k->rq_tail)
 		th->ready_tsc = k->rq[k->rq_tail % RUNTIME_RQ_SIZE]->ready_tsc;
 	oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
@@ -648,6 +665,7 @@ void thread_ready_head_locked(thread_t *th)
 	}
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
+#endif
 }
 
 /**
@@ -677,11 +695,13 @@ void thread_ready(thread_t *th)
 		return;
 	}
 
+#ifdef ORIGINAL_ALGO
 	k->rq[k->rq_head % RUNTIME_RQ_SIZE] = th;
 	store_release(&k->rq_head, k->rq_head + 1);
 	if (k->rq_head - load_acquire(&k->rq_tail) == 1)
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
+#endif
 	putk();
 }
 
@@ -699,6 +719,7 @@ void thread_ready_head(thread_t *th)
 	k = getk();
 	thread_ready_prepare(k, th);
 	spin_lock(&k->lock);
+#ifdef ORIGINAL_ALGO
 	if (k->rq_head != k->rq_tail)
 		th->ready_tsc = k->rq[k->rq_tail % RUNTIME_RQ_SIZE]->ready_tsc;
 	oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
@@ -708,6 +729,7 @@ void thread_ready_head(thread_t *th)
 		k->rq_head--;
 		STAT(RQ_OVERFLOW)++;
 	}
+#endif
 	spin_unlock(&k->lock);
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
