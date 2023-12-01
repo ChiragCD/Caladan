@@ -346,6 +346,14 @@ thread_t * pop_heap() {
     return best;
 }
 
+// Whether a is to be prioritized over b
+int higher_priority_than(thread_t * a, thread_t * b) {
+    if(!a) return 0;
+    if(!b) return 1;
+    if(a->ready_tsc < b->ready_tsc) return 1;
+    return 0;
+}
+
 void insert_heap(thread_t *th) {
 	struct kthread *k = getk();
     if(k->rheap_size == RUNTIME_RHEAP_SIZE) {
@@ -729,14 +737,6 @@ void thread_ready_head_locked(thread_t *th)
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
 #endif
-}
-
-// Whether a is to be prioritized over b
-int higher_priority_than(thread_t * a, thread_t * b) {
-    if(!a) return 0;
-    if(!b) return 1;
-    if(a->ready_tsc < b->ready_tsc) return 1;
-    return 0;
 }
 
 /**
