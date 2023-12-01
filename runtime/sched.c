@@ -580,6 +580,8 @@ static __always_inline void enter_schedule(thread_t *curth)
 		drain_overflow(k);
 
 	update_oldest_tsc(k);
+#elif defined(PRIORITY_FCFS)
+    th = pop_heap();
 #endif
 	spin_unlock(&k->lock);
 
