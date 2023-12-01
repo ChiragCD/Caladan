@@ -324,6 +324,7 @@ static __noinline bool do_watchdog(struct kthread *l)
 }
 
 thread_t * pop_heap() {
+#ifdef PRIORITY_FCFS
     struct kthread *l = myk();
     assert(l->rheap_size != 0);
     thread_t * best = l->rheap[0];
@@ -344,6 +345,7 @@ thread_t * pop_heap() {
         curr = l->rheap[new_ind];
     }
     return best;
+#endif
 }
 
 // Whether a is to be prioritized over b
@@ -355,6 +357,7 @@ int higher_priority_than(thread_t * a, thread_t * b) {
 }
 
 void insert_heap(thread_t *th) {
+#ifdef PRIORITY_FCFS
 	struct kthread *k = getk();
     if(k->rheap_size == RUNTIME_RHEAP_SIZE) {
         // Drop, only if overflow and lower priority than last
@@ -373,6 +376,7 @@ void insert_heap(thread_t *th) {
         }
         index /= 2;
     }
+#endif
 }
 
 /* the main scheduler routine, decides what to run next */
