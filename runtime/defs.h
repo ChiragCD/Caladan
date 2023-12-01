@@ -23,7 +23,7 @@
 #include <runtime/rcu.h>
 #include <runtime/preempt.h>
 
-// #define ORIGINAL_ALGO
+//#define ORIGINAL_ALGO
 #define PRIORITY_FCFS
 
 /*

@@ -169,7 +169,12 @@ static bool work_available(struct kthread *k, uint64_t now_tsc)
 	}
 #endif
 
-	return ACCESS_ONCE(k->rq_tail) != ACCESS_ONCE(k->rq_head) ||
+	return 
+#ifdef ORIGINAL_ALGO
+        ACCESS_ONCE(k->rq_tail) != ACCESS_ONCE(k->rq_head) ||
+#elif defined(PRIORITY_FCFS)
+        k->rheap_size != 0 ||
+#endif
 	       softirq_pending(k, now_tsc);
 }
 
@@ -270,6 +275,7 @@ static void merge_runqueues(struct kthread *l, uint32_t lsize, struct kthread *r
 
 static bool steal_work(struct kthread *l, struct kthread *r)
 {
+#ifdef ORIGINAL_ALGO
 	uint64_t now_tsc = rdtsc();
 	uint32_t lsize, rsize, num_to_steal = 0;
 
@@ -308,6 +314,7 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 	}
 
 	spin_unlock(&r->lock);
+#endif
 	return false;
 }
 
@@ -566,6 +573,8 @@ static __always_inline void enter_schedule(thread_t *curth)
 	if (
 #ifdef ORIGINAL_ALGO
         k->rq_head == k->rq_tail ||
+#elif defined(PRIORITY_FCFS)
+        k->rheap_size == 0 ||
 #endif
 	    preempt_cede_needed(k) ||
 #ifdef GC
@@ -740,6 +749,9 @@ void thread_ready_head_locked(thread_t *th)
 	}
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
+#elif defined(PRIORITY_FCFS)
+    th->ready_tsc = 0;
+    insert_heap(th);
 #endif
 }
 
@@ -806,13 +818,13 @@ void thread_ready_head(thread_t *th)
 		k->rq_head--;
 		STAT(RQ_OVERFLOW)++;
 	}
+	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
+	ACCESS_ONCE(k->q_ptrs->rq_head)++;
 #elif defined(PRIORITY_FCFS)
     th->ready_tsc = 0;
     insert_heap(th);
 #endif
 	spin_unlock(&k->lock);
-	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
-	ACCESS_ONCE(k->q_ptrs->rq_head)++;
 	putk();
 }
 
