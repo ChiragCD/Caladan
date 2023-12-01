@@ -346,6 +346,27 @@ thread_t * pop_heap() {
     return best;
 }
 
+void insert_heap(thread_t *th) {
+	struct kthread *k = getk();
+    if(k->rheap_size == RUNTIME_RHEAP_SIZE) {
+        // Drop, only if overflow and lower priority than last
+        if(th->ready_tsc >= k->rheap[RUNTIME_RHEAP_SIZE-1]->ready_tsc) return;
+    } else {
+        k->rheap_size++;
+    }
+    k->rheap[k->rheap_size-1] = th;
+    int index = k->rheap_size-1;
+    thread_t * parent = NULL;
+    while(index > 0) {
+        parent = k->rheap[index/2];
+        if(!parent || higher_priority_than(k->rheap[index], parent)) {
+            k->rheap[index/2] = k->rheap[index];
+            k->rheap[index] = parent;
+        }
+        index /= 2;
+    }
+}
+
 /* the main scheduler routine, decides what to run next */
 static __noreturn __noinline void schedule(void)
 {
@@ -714,27 +735,6 @@ int higher_priority_than(thread_t * a, thread_t * b) {
     if(!b) return 1;
     if(a->ready_tsc < b->ready_tsc) return 1;
     return 0;
-}
-
-void insert_heap(thread_t *th) {
-	struct kthread *k = getk();
-    if(k->rheap_size == RUNTIME_RHEAP_SIZE) {
-        // Drop, only if overflow and lower priority than last
-        if(th->ready_tsc >= k->rheap[RUNTIME_RHEAP_SIZE-1]->ready_tsc) return;
-    } else {
-        k->rheap_size++;
-    }
-    k->rheap[k->rheap_size-1] = th;
-    int index = k->rheap_size-1;
-    thread_t * parent = NULL;
-    while(index > 0) {
-        parent = k->rheap[index/2];
-        if(!parent || higher_priority_than(k->rheap[index], parent)) {
-            k->rheap[index/2] = k->rheap[index];
-            k->rheap[index] = parent;
-        }
-        index /= 2;
-    }
 }
 
 /**

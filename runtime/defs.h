@@ -104,6 +104,9 @@ struct thread {
 	unsigned int		last_cpu;
 	uint64_t		run_start_tsc;
 	uint64_t		ready_tsc;
+#ifdef PRIORITY_FCFS
+    uint64_t        priority;
+#endif
 	uint64_t		tlsvar;
 #ifdef GC
 	struct list_node	gc_link;
@@ -418,7 +421,6 @@ struct kthread {
 	uint64_t		stats[STAT_NR];
 
 #ifdef PRIORITY_FCFS
-    uint32_t        priority;
     int             rheap_size;
     thread_t        *rheap[RUNTIME_RHEAP_SIZE];
 #endif
