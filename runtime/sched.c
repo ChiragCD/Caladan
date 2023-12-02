@@ -391,11 +391,11 @@ again:
 		goto done;
 	}
 
-	// /* then try to steal from a sibling kthread */
-	// sibling = cpu_map[l->curr_cpu].sibling_core;
-	// r = cpu_map[sibling].recent_kthread;
-	// if (r && r != l && steal_work(l, r))
-	// 	goto done;
+	/* then try to steal from a sibling kthread */
+	sibling = cpu_map[l->curr_cpu].sibling_core;
+	r = cpu_map[sibling].recent_kthread;
+	if (r && r != l && steal_work(l, r))
+		goto done;
 
 	// /* try to steal from every kthread */
 	// start_idx = rand_crc32c((uintptr_t)l);
