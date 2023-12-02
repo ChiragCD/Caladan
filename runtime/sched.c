@@ -82,11 +82,14 @@ thread_t * heap_pop(struct kthread * k) {
     if(k->rq_head == 0) return NULL;
     th = k->rq[k->rq_tail];             // Tail is always 0
     uint64_t actual_priority = th->ready_tsc;
-    set_worst_priority(th);
     int index = k->rq_tail;
     int left = 2*index+1;
     int right = 2*index+2;
-    while ((right < RUNTIME_RQ_SIZE) && (k->rq[index]) &&
+    k->rq_head--;
+	ACCESS_ONCE(k->q_ptrs->rq_head)--;
+    k->rq[0] = k->rq[k->rq_head];
+    k->rq[k->rq_head] = NULL;
+    while (((right < k->rq_head) || (left < k->rq_head)) && (k->rq[index]) &&
             (has_priority_over(k->rq[left], k->rq[index]) || has_priority_over(k->rq[right], k->rq[index]))) {
         thread_t * curr = k->rq[index];
         int next_index = (has_priority_over(k->rq[left], k->rq[right]) ? left : right);
@@ -96,10 +99,6 @@ thread_t * heap_pop(struct kthread * k) {
         left = 2*index+1;
         right = 2*index+2;
     }
-    k->rq[index] = NULL;
-    k->rq_head--;
-	ACCESS_ONCE(k->q_ptrs->rq_head)--;
-    th->ready_tsc = actual_priority;
     return th;
 }
 
@@ -219,7 +218,6 @@ static void drain_overflow(struct kthread *l)
 		if (!th)
 			break;
         heap_insert(l, th);
-		// l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
 	}
 }
 
@@ -261,19 +259,12 @@ static uint32_t drain_threads(struct kthread *k, struct list_head *l, uint32_t n
 	for (i = 0; i < nr; i++) {
         if(k->rq_head > 0) {
             th = k->rq[--k->rq_head];
-		// if (likely(wraps_lt(rq_tail, rq_head))) {
-		// 	th = k->rq[rq_tail++ % RUNTIME_RQ_SIZE];
 		} else {
 			th = list_pop(&k->rq_overflow, thread_t, link);
 			if (!th)
 				break;
 		}
 		list_add_tail(l, &th->link);
-	}
-
-	if (update_tail) {
-		// k->rq_tail = rq_tail;
-		// ACCESS_ONCE(k->q_ptrs->rq_tail) += i;
 	}
 
 	return i;
@@ -506,11 +497,6 @@ again:
 
 done:
 	/* pop off a thread and run it */
-	// assert(l->rq_head != l->rq_tail);
-	// th = l->rq[l->rq_tail % RUNTIME_RQ_SIZE];
-    // l->rq_head--;
-    // for(int i = 0; i < l->rq_head; i++) l->rq[i] = l->rq[i+1];
-    // l->rq[l->rq_head] = NULL;
     th = heap_pop(l);
 
 	/* move overflow tasks into the runqueue */
@@ -574,10 +560,6 @@ static __always_inline void enter_schedule(thread_t *curth)
 
 	/* pop the next runnable thread from the queue */
     assert(k->rq_head > k->rq_tail);
-	// th = k->rq[k->rq_tail % RUNTIME_RQ_SIZE];
-    // k->rq_head--;
-    // for(int i = 0; i < k->rq_head; i++) k->rq[i] = k->rq[i+1];
-    // k->rq[k->rq_head] = NULL;
     th = heap_pop(k);
 
 	/* move overflow tasks into the runqueue */
@@ -676,19 +658,9 @@ void thread_ready_locked(thread_t *th)
 		drain_overflow(k);
 
 	thread_ready_prepare(k, th);
-	// if (unlikely(k->rq_head - k->rq_tail >= RUNTIME_RQ_SIZE)) {
-	// 	assert(k->rq_head - k->rq_tail == RUNTIME_RQ_SIZE);
-	// 	list_add_tail(&k->rq_overflow, &th->link);
-	// 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
-	// 	STAT(RQ_OVERFLOW)++;
-	// 	return;
-	// }
-
-	// k->rq[k->rq_head++ % RUNTIME_RQ_SIZE] = th;
     heap_insert(k, th);
 	if (k->rq_head - k->rq_tail == 1)
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
-	// ACCESS_ONCE(k->q_ptrs->rq_head)++;
 }
 
 /**
@@ -716,21 +688,6 @@ void thread_ready_head_locked(thread_t *th)
     th->ready_tsc = 0;
     heap_insert(k, th);
     th->ready_tsc = actual_priority;
-
-    // oldestth = k->rq[(k->rq_head-1) % RUNTIME_RQ_SIZE];
-    // for(int i = k->rq_head; i > 0; i--) k->rq[i] = k->rq[i-1];
-	// // oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
-	// k->rq[k->rq_tail % RUNTIME_RQ_SIZE] = th;
-    // if(k->rq_head < RUNTIME_RQ_SIZE) {
-    //     k->rq_head++;
-	//     ACCESS_ONCE(k->q_ptrs->rq_head)++;
-    // }
-    // else list_add(&k->rq_overflow, &oldestth->link);
-	// if (unlikely(k->rq_head - k->rq_tail > RUNTIME_RQ_SIZE)) {
-	// 	list_add(&k->rq_overflow, &oldestth->link);
-	// 	k->rq_head--;
-	// 	STAT(RQ_OVERFLOW)++;
-	// }
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 }
 
@@ -792,15 +749,6 @@ void thread_ready_head(thread_t *th)
     th->ready_tsc = 0;
     heap_insert(k, th);
     th->ready_tsc = actual_priority;
-    // oldestth = k->rq[(k->rq_head-1) % RUNTIME_RQ_SIZE];
-    // for(int i = k->rq_head; i > 0; i--) k->rq[i] = k->rq[i-1];
-	// // oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
-	// k->rq[k->rq_tail % RUNTIME_RQ_SIZE] = th;
-    // if(k->rq_head < RUNTIME_RQ_SIZE) {
-    //     k->rq_head++;
-	//     ACCESS_ONCE(k->q_ptrs->rq_head)++;
-    // }
-    // else list_add(&k->rq_overflow, &oldestth->link);
 	spin_unlock(&k->lock);
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	putk();
