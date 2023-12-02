@@ -651,7 +651,7 @@ void thread_ready_head_locked(thread_t *th)
         k->rq_head++;
 	    ACCESS_ONCE(k->q_ptrs->rq_head)++;
     }
-    else list_add(&k->rq_overflow, &oldestth->link);;
+    else list_add(&k->rq_overflow, &oldestth->link);
 	// if (unlikely(k->rq_head - k->rq_tail > RUNTIME_RQ_SIZE)) {
 	// 	list_add(&k->rq_overflow, &oldestth->link);
 	// 	k->rq_head--;
@@ -712,16 +712,17 @@ void thread_ready_head(thread_t *th)
 	spin_lock(&k->lock);
 	if (k->rq_head != k->rq_tail)
 		th->ready_tsc = k->rq[k->rq_tail % RUNTIME_RQ_SIZE]->ready_tsc;
-	oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
+
+    oldestth = k->rq[(k->rq_head-1) % RUNTIME_RQ_SIZE];
+    for(int i = k->rq_head; i > 0; i--) k->rq[i] = k->rq[i-1];
+	// oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
 	k->rq[k->rq_tail % RUNTIME_RQ_SIZE] = th;
-	if (unlikely(k->rq_head - k->rq_tail > RUNTIME_RQ_SIZE)) {
-		list_add(&k->rq_overflow, &oldestth->link);
-		k->rq_head--;
-		STAT(RQ_OVERFLOW)++;
-	}
+    if(k->rq_head < RUNTIME_RQ_SIZE) {
+        k->rq_head++;
+	    ACCESS_ONCE(k->q_ptrs->rq_head)++;
+    }
 	spin_unlock(&k->lock);
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
-	ACCESS_ONCE(k->q_ptrs->rq_head)++;
 	putk();
 }
 
