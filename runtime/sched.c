@@ -69,11 +69,7 @@ static inline bool cores_have_affinity(unsigned int cpua, unsigned int cpub)
 bool has_priority_over(thread_t * a, thread_t * b) {
     if(!a) return false;
     if(!b) return true;
-    return (a->ready_tsc < b->ready_tsc);
-}
-
-void set_worst_priority(thread_t * th) {
-    th->ready_tsc = (uint64_t)-1;
+    return (a->priority < b->priority);
 }
 
 thread_t * heap_pop(struct kthread * k) {
@@ -81,7 +77,6 @@ thread_t * heap_pop(struct kthread * k) {
 	assert_spin_lock_held(&k->lock);
     if(k->rq_head == 0) return NULL;
     th = k->rq[k->rq_tail];             // Tail is always 0
-    uint64_t actual_priority = th->ready_tsc;
     int index = k->rq_tail;
     int left = 2*index+1;
     int right = 2*index+2;
@@ -310,7 +305,6 @@ static void merge_runqueues(struct kthread *l, uint32_t lsize, struct kthread *r
 			list_add_tail(&l->rq_overflow, &th->link);
 		else
             heap_insert(l, th);
-			// l->rq[l->rq_head++] = th;
 	}
 
 	ACCESS_ONCE(l->q_ptrs->rq_head) += rsize;
@@ -624,6 +618,10 @@ void thread_park_and_preempt_enable(void)
 	enter_schedule(curth);
 }
 
+uint64_t set_thread_priority(thread_t * th) {
+    th->priority = th->ready_tsc;       // FCFS
+}
+
 static void thread_ready_prepare(struct kthread *k, thread_t *th)
 {
 	/* check for misuse where a ready thread is marked ready again */
@@ -632,6 +630,7 @@ static void thread_ready_prepare(struct kthread *k, thread_t *th)
 	/* prepare thread to be runnable */
 	th->thread_ready = true;
 	th->ready_tsc = rdtsc();
+    th->priority = set_thread_priority(th);
 	if (cores_have_affinity(th->last_cpu, k->curr_cpu))
 		STAT(LOCAL_WAKES)++;
 	else
@@ -684,10 +683,10 @@ void thread_ready_head_locked(thread_t *th)
 	if (k->rq_head != k->rq_tail)
 		th->ready_tsc = k->rq[k->rq_tail % RUNTIME_RQ_SIZE]->ready_tsc;
     
-    uint64_t actual_priority = th->ready_tsc;
-    th->ready_tsc = 0;
+    uint64_t actual_priority = th->priority;
+    th->priority = 0;
     heap_insert(k, th);
-    th->ready_tsc = actual_priority;
+    th->priority = actual_priority;
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 }
 
@@ -745,10 +744,10 @@ void thread_ready_head(thread_t *th)
 	if (k->rq_head != k->rq_tail)
 		th->ready_tsc = k->rq[k->rq_tail % RUNTIME_RQ_SIZE]->ready_tsc;
 
-    uint64_t actual_priority = th->ready_tsc;
-    th->ready_tsc = 0;
+    uint64_t actual_priority = th->priority;
+    th->priority = 0;
     heap_insert(k, th);
-    th->ready_tsc = actual_priority;
+    th->priority = actual_priority;
 	spin_unlock(&k->lock);
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	putk();
