@@ -439,8 +439,11 @@ again:
 done:
 	/* pop off a thread and run it */
 	assert(l->rq_head != l->rq_tail);
-	th = l->rq[l->rq_tail++ % RUNTIME_RQ_SIZE];
-	ACCESS_ONCE(l->q_ptrs->rq_tail)++;
+	th = l->rq[l->rq_tail % RUNTIME_RQ_SIZE];
+    for(int i = 0; i < l->rq_head; i++) l->rq[i] = l->rq[i+1];
+    l->rq_head--;
+    l->rq[l->rq_head] = NULL;
+	ACCESS_ONCE(l->q_ptrs->rq_tail);
 
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&l->rq_overflow)))
