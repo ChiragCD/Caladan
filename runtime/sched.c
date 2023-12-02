@@ -506,6 +506,7 @@ static __always_inline void enter_schedule(thread_t *curth)
 	perthread_get_stable(last_tsc) = now_tsc;
 
 	/* pop the next runnable thread from the queue */
+    assert(k->rq_head > k->rq_tail);
 	th = k->rq[k->rq_tail % RUNTIME_RQ_SIZE];
     k->rq_head--;
     for(int i = 0; i < k->rq_head; i++) k->rq[i] = k->rq[i+1];
@@ -706,6 +707,7 @@ void thread_ready_head(thread_t *th)
 	struct kthread *k;
 	thread_t *oldestth;
 
+    assert(k->rq_head > k->rq_tail);
 	k = getk();
 	thread_ready_prepare(k, th);
 	spin_lock(&k->lock);
