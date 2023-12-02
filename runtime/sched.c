@@ -480,7 +480,7 @@ done:
     // l->rq_head--;
     // for(int i = 0; i < l->rq_head; i++) l->rq[i] = l->rq[i+1];
     // l->rq[l->rq_head] = NULL;
-    heap_pop(l);
+    th = heap_pop(l);
 
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&l->rq_overflow)))
@@ -547,7 +547,7 @@ static __always_inline void enter_schedule(thread_t *curth)
     // k->rq_head--;
     // for(int i = 0; i < k->rq_head; i++) k->rq[i] = k->rq[i+1];
     // k->rq[k->rq_head] = NULL;
-    heap_pop(k);
+    th = heap_pop(k);
 
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&k->rq_overflow)))
