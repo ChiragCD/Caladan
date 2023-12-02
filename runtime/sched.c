@@ -66,6 +66,41 @@ static inline bool cores_have_affinity(unsigned int cpua, unsigned int cpub)
 	       cpu_map[cpua].sibling_core == cpub;
 }
 
+bool has_priority_over(thread_t * a, thread_t * b) {
+    if(!a) return false;
+    if(!b) return true;
+    return (a->ready_tsc < b->ready_tsc);
+}
+
+void set_worst_priority(thread_t * th) {
+    th->ready_tsc = (uint64_t)-1;
+}
+
+thread_t * heap_pop(struct kthread * k) {
+	thread_t *th;
+	assert_spin_lock_held(&k->lock);
+    if(k->rq_head == 0) return NULL;
+    th = k->rq[k->rq_tail];             // Tail is always 0
+    uint64_t actual_priority = th->ready_tsc;
+    set_worst_priority(th);
+    int index = k->rq_tail;
+    int left = 2*index+1;
+    int right = 2*index+2;
+    while ((right < RUNTIME_RQ_SIZE) && (k->rq[index]) &&
+            (has_priority_over(k->rq[left], k->rq[index]) || has_priority_over(k->rq[right], k->rq[index]))) {
+        thread_t * curr = k->rq[index];
+        int next_index = (has_priority_over(k->rq[left], k->rq[right]) ? left : right);
+        k->rq[index] = k->rq[next_index];
+        k->rq[next_index] = curr;
+        index = next_index;
+        left = 2*index+1;
+        right = 2*index+2;
+    }
+    k->rq[index] = NULL;
+    th->ready_tsc = actual_priority;
+    return th;
+}
+
 /**
  * jmp_thread - runs a thread, popping its trap frame
  * @th: the thread to run
@@ -440,11 +475,12 @@ again:
 
 done:
 	/* pop off a thread and run it */
-	assert(l->rq_head != l->rq_tail);
-	th = l->rq[l->rq_tail % RUNTIME_RQ_SIZE];
-    l->rq_head--;
-    for(int i = 0; i < l->rq_head; i++) l->rq[i] = l->rq[i+1];
-    l->rq[l->rq_head] = NULL;
+	// assert(l->rq_head != l->rq_tail);
+	// th = l->rq[l->rq_tail % RUNTIME_RQ_SIZE];
+    // l->rq_head--;
+    // for(int i = 0; i < l->rq_head; i++) l->rq[i] = l->rq[i+1];
+    // l->rq[l->rq_head] = NULL;
+    heap_pop(l);
 
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&l->rq_overflow)))
@@ -507,10 +543,11 @@ static __always_inline void enter_schedule(thread_t *curth)
 
 	/* pop the next runnable thread from the queue */
     assert(k->rq_head > k->rq_tail);
-	th = k->rq[k->rq_tail % RUNTIME_RQ_SIZE];
-    k->rq_head--;
-    for(int i = 0; i < k->rq_head; i++) k->rq[i] = k->rq[i+1];
-    k->rq[k->rq_head] = NULL;
+	// th = k->rq[k->rq_tail % RUNTIME_RQ_SIZE];
+    // k->rq_head--;
+    // for(int i = 0; i < k->rq_head; i++) k->rq[i] = k->rq[i+1];
+    // k->rq[k->rq_head] = NULL;
+    heap_pop(k);
 
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&k->rq_overflow)))
