@@ -648,7 +648,6 @@ void thread_ready_head_locked(thread_t *th)
 	// oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
 	k->rq[k->rq_tail % RUNTIME_RQ_SIZE] = th;
     if(k->rq_head < RUNTIME_RQ_SIZE) {
-        k->rq[k->rq_head] = oldestth;
         k->rq_head++;
 	    ACCESS_ONCE(k->q_ptrs->rq_head)++;
     }
