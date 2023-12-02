@@ -94,6 +94,7 @@ thread_t * heap_pop(struct kthread * k) {
         left = 2*index+1;
         right = 2*index+2;
     }
+    if(th->ready_tsc < k->q_ptrs->oldest_tsc) th->ready_tsc = k->q_ptrs->oldest_tsc;
     return th;
 }
 
