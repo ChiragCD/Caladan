@@ -180,16 +180,18 @@ static bool work_available(struct kthread *k, uint64_t now_tsc)
 
 static void update_oldest_tsc(struct kthread *k)
 {
-#ifdef ORIGINAL_ALGO
 	thread_t *th;
 
 	assert_spin_lock_held(&k->lock);
 
 	/* find the oldest thread in the runqueue */
+#ifdef ORIGINAL_ALGO
 	if (load_acquire(&k->rq_head) != k->rq_tail) {
 		th = k->rq[k->rq_tail % RUNTIME_RQ_SIZE];
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	}
+#elif defined(PRIORITY_FCFS)
+    ACCESS_ONCE(k->q_ptrs->oldest_tsc) = k->rheap[0]->ready_tsc;
 #endif
 }
 
@@ -525,11 +527,11 @@ done:
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&l->rq_overflow)))
 		drain_overflow(l);
-
-	update_oldest_tsc(l);
 #elif defined(PRIORITY_FCFS)
     th = pop_heap();
 #endif
+
+	update_oldest_tsc(l);
 	spin_unlock(&l->lock);
 
 	/* update exit stat counters */
@@ -597,11 +599,11 @@ static __always_inline void enter_schedule(thread_t *curth)
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&k->rq_overflow)))
 		drain_overflow(k);
-
-	update_oldest_tsc(k);
 #elif defined(PRIORITY_FCFS)
     th = pop_heap();
 #endif
+
+	update_oldest_tsc(k);
 	spin_unlock(&k->lock);
 
 	/* update exported thread run start time */
