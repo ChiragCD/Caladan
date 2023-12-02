@@ -98,8 +98,36 @@ thread_t * heap_pop(struct kthread * k) {
     }
     k->rq[index] = NULL;
     k->rq_head--;
+	ACCESS_ONCE(k->q_ptrs->rq_head)--;
     th->ready_tsc = actual_priority;
     return th;
+}
+
+void heap_insert(struct kthread * k, thread_t * th) {
+	assert_spin_lock_held(&k->lock);
+    ACCESS_ONCE(k->q_ptrs->rq_head)++;
+    if(k->rq_head == RUNTIME_RQ_SIZE) {
+        thread_t * overflowable = th;
+        if(has_priority_over(th, k->rq[k->rq_head-1])) {
+            overflowable = k->rq[k->rq_head-1];
+            k->rq[k->rq_head-1] = th;
+        } else {
+            th = k->rq[k->rq_head-1];
+        }
+		list_add_tail(&k->rq_overflow, &overflowable->link);
+    } else {
+        k->rq[k->rq_head] = th;
+        k->rq_head++;
+    }
+    int index = k->rq_head - 1;
+    thread_t * parent = k->rq[index/2];
+    while(index > 0 && has_priority_over(th, parent)) {
+        k->rq[index/2] = th;
+        k->rq[index] = parent;
+        index /= 2;
+        th = k->rq[index];
+        parent = k->rq[index/2];
+    }
 }
 
 /**
@@ -190,7 +218,8 @@ static void drain_overflow(struct kthread *l)
 		th = list_pop(&l->rq_overflow, thread_t, link);
 		if (!th)
 			break;
-		l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
+        heap_insert(l, th);
+		// l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
 	}
 }
 
@@ -289,7 +318,8 @@ static void merge_runqueues(struct kthread *l, uint32_t lsize, struct kthread *r
 		if (unlikely(l->rq_head - l->rq_tail >= RUNTIME_RQ_SIZE))
 			list_add_tail(&l->rq_overflow, &th->link);
 		else
-			l->rq[l->rq_head++] = th;
+            heap_insert(l, th);
+			// l->rq[l->rq_head++] = th;
 	}
 
 	ACCESS_ONCE(l->q_ptrs->rq_head) += rsize;
@@ -646,18 +676,19 @@ void thread_ready_locked(thread_t *th)
 		drain_overflow(k);
 
 	thread_ready_prepare(k, th);
-	if (unlikely(k->rq_head - k->rq_tail >= RUNTIME_RQ_SIZE)) {
-		assert(k->rq_head - k->rq_tail == RUNTIME_RQ_SIZE);
-		list_add_tail(&k->rq_overflow, &th->link);
-		ACCESS_ONCE(k->q_ptrs->rq_head)++;
-		STAT(RQ_OVERFLOW)++;
-		return;
-	}
+	// if (unlikely(k->rq_head - k->rq_tail >= RUNTIME_RQ_SIZE)) {
+	// 	assert(k->rq_head - k->rq_tail == RUNTIME_RQ_SIZE);
+	// 	list_add_tail(&k->rq_overflow, &th->link);
+	// 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
+	// 	STAT(RQ_OVERFLOW)++;
+	// 	return;
+	// }
 
-	k->rq[k->rq_head++ % RUNTIME_RQ_SIZE] = th;
+	// k->rq[k->rq_head++ % RUNTIME_RQ_SIZE] = th;
+    heap_insert(k, th);
 	if (k->rq_head - k->rq_tail == 1)
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
-	ACCESS_ONCE(k->q_ptrs->rq_head)++;
+	// ACCESS_ONCE(k->q_ptrs->rq_head)++;
 }
 
 /**
@@ -725,11 +756,12 @@ void thread_ready(thread_t *th)
 		return;
 	}
 
-	k->rq[k->rq_head % RUNTIME_RQ_SIZE] = th;
-	store_release(&k->rq_head, k->rq_head + 1);
+    heap_insert(k, th);
+	// k->rq[k->rq_head % RUNTIME_RQ_SIZE] = th;
+	// store_release(&k->rq_head, k->rq_head + 1);
 	if (k->rq_head - load_acquire(&k->rq_tail) == 1)
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
-	ACCESS_ONCE(k->q_ptrs->rq_head)++;
+	// ACCESS_ONCE(k->q_ptrs->rq_head)++;
 	putk();
 }
 
