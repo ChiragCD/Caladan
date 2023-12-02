@@ -97,6 +97,7 @@ thread_t * heap_pop(struct kthread * k) {
         right = 2*index+2;
     }
     k->rq[index] = NULL;
+    k->rq_head--;
     th->ready_tsc = actual_priority;
     return th;
 }
@@ -758,6 +759,7 @@ void thread_ready_head(thread_t *th)
         k->rq_head++;
 	    ACCESS_ONCE(k->q_ptrs->rq_head)++;
     }
+    else list_add(&k->rq_overflow, &oldestth->link);
 	spin_unlock(&k->lock);
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	putk();
