@@ -187,17 +187,15 @@ static void update_oldest_tsc(struct kthread *k)
 /* drain up to nr threads from k's runqueue into list l */
 static uint32_t drain_threads(struct kthread *k, struct list_head *l, uint32_t nr, bool update_tail)
 {
-	uint32_t i, rq_head;//, rq_tail;
+	uint32_t i;//, rq_head;//, rq_tail;
 	thread_t *th;
 
 	// rq_head = load_acquire(&k->rq_head);
-	// rq_tail = k->rq_tail;
-
-    rq_head = k->rq_head;
+        // rq_tail = k->rq_tail;
 
 	for (i = 0; i < nr; i++) {
         if(k->rq_head > 0) {
-            th = k->rq[k->rq_head--];
+            th = k->rq[--k->rq_head];
 		// if (likely(wraps_lt(rq_tail, rq_head))) {
 		// 	th = k->rq[rq_tail++ % RUNTIME_RQ_SIZE];
 		} else {
@@ -447,7 +445,6 @@ done:
     for(int i = 0; i < l->rq_head; i++) l->rq[i] = l->rq[i+1];
     l->rq_head = (l->rq_head-1)%RUNTIME_RQ_SIZE;
     l->rq[l->rq_head] = NULL;
-	ACCESS_ONCE(l->q_ptrs->rq_tail);
 
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&l->rq_overflow)))
@@ -513,7 +510,6 @@ static __always_inline void enter_schedule(thread_t *curth)
     for(int i = 0; i < k->rq_head; i++) k->rq[i] = k->rq[i+1];
     k->rq_head = (k->rq_head-1)%RUNTIME_RQ_SIZE;
     k->rq[k->rq_head] = NULL;
-	ACCESS_ONCE(k->q_ptrs->rq_tail);
 
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&k->rq_overflow)))
@@ -645,15 +641,22 @@ void thread_ready_head_locked(thread_t *th)
 
 	if (k->rq_head != k->rq_tail)
 		th->ready_tsc = k->rq[k->rq_tail % RUNTIME_RQ_SIZE]->ready_tsc;
-	oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
+    
+    oldestth = k->rq[(k->rq_head-1) % RUNTIME_RQ_SIZE];
+    for(int i = k->rq_head; i > 0; i--) k->rq[i] = k->rq[i-1];
+	// oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
 	k->rq[k->rq_tail % RUNTIME_RQ_SIZE] = th;
-	if (unlikely(k->rq_head - k->rq_tail > RUNTIME_RQ_SIZE)) {
-		list_add(&k->rq_overflow, &oldestth->link);
-		k->rq_head--;
-		STAT(RQ_OVERFLOW)++;
-	}
+    if(k->rq_head < RUNTIME_RQ_SIZE) {
+        k->rq_head++;
+	    ACCESS_ONCE(k->q_ptrs->rq_head)++;
+    }
+    else list_add(&k->rq_overflow, &oldestth->link);;
+	// if (unlikely(k->rq_head - k->rq_tail > RUNTIME_RQ_SIZE)) {
+	// 	list_add(&k->rq_overflow, &oldestth->link);
+	// 	k->rq_head--;
+	// 	STAT(RQ_OVERFLOW)++;
+	// }
 	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
-	ACCESS_ONCE(k->q_ptrs->rq_head)++;
 }
 
 /**
