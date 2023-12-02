@@ -253,7 +253,7 @@ static void merge_runqueues(struct kthread *l, uint32_t lsize, struct kthread *r
 		if (unlikely(l->rq_head - l->rq_tail >= RUNTIME_RQ_SIZE))
 			list_add_tail(&l->rq_overflow, &th->link);
 		else
-			l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
+			l->rq[l->rq_head++] = th;
 	}
 
 	ACCESS_ONCE(l->q_ptrs->rq_head) += rsize;
