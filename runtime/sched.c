@@ -617,7 +617,7 @@ void thread_park_and_preempt_enable(void)
 }
 
 void set_thread_priority(thread_t * th) {
-    th->priority = th->ready_tsc;       // FCFS
+    if(th->priority == (uint)-1) th->priority = th->ready_tsc;       // FCFS
 }
 
 static void thread_ready_prepare(struct kthread *k, thread_t *th)

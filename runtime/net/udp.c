@@ -69,6 +69,10 @@ struct udpconn {
 	struct flow_registration		flow;
 };
 
+void set_thread_priority(thread_t * th, struct mbuf * m) {
+    th->priority = (uint) -1;       // Default
+}
+
 /* handles ingress packets for UDP sockets */
 static void udp_conn_recv(struct trans_entry *e, struct mbuf *m)
 {
@@ -88,12 +92,18 @@ static void udp_conn_recv(struct trans_entry *e, struct mbuf *m)
 		return;
 	}
 
-	/* enqueue the packet on the ingress queue */
-	mbufq_push_tail(&c->inq, m);
-	c->inq_len++;
-
 	/* wake up a waiter */
 	th = waitq_signal(&c->inq_wq, &c->inq_lock);
+
+    if(th) {
+        set_thread_priority(th, m);
+        th->mbuffer = m;
+    } else {
+	/* enqueue the packet on the ingress queue */
+        printf("Failed to get thread!\n");
+	    mbufq_push_tail(&c->inq, m);
+	    c->inq_len++;
+    }
 	spin_unlock_np(&c->inq_lock);
 
 	waitq_signal_finish(th);
@@ -331,8 +341,15 @@ ssize_t udp_read_from(udpconn_t *c, void *buf, size_t len,
 	}
 
 	/* pop an mbuf and deliver the payload */
-	m = mbufq_pop_head(&c->inq);
-	c->inq_len--;
+    // CD - POP THREAD SPECIFIC, NOT HEAD. CAN USE thread_self()
+    thread_t * th = thread_self();
+    if(th->mbuffer) m = th->mbuffer;
+	else {
+        m = mbufq_pop_head(&c->inq);
+	    c->inq_len--;
+        set_thread_priority(th, m);
+    }
+    th->mbuffer = NULL;
 	spin_unlock_np(&c->inq_lock);
 
 	ret = MIN(len, mbuf_length(m));
