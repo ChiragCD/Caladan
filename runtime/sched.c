@@ -618,7 +618,7 @@ void thread_park_and_preempt_enable(void)
 	enter_schedule(curth);
 }
 
-uint64_t set_thread_priority(thread_t * th) {
+void set_thread_priority(thread_t * th) {
     th->priority = th->ready_tsc;       // FCFS
 }
 
@@ -630,7 +630,7 @@ static void thread_ready_prepare(struct kthread *k, thread_t *th)
 	/* prepare thread to be runnable */
 	th->thread_ready = true;
 	th->ready_tsc = rdtsc();
-    th->priority = set_thread_priority(th);
+    set_thread_priority(th);
 	if (cores_have_affinity(th->last_cpu, k->curr_cpu))
 		STAT(LOCAL_WAKES)++;
 	else
@@ -673,7 +673,6 @@ void thread_ready_locked(thread_t *th)
 void thread_ready_head_locked(thread_t *th)
 {
 	struct kthread *k = myk();
-	thread_t *oldestth;
 
 	assert_preempt_disabled();
 	assert_spin_lock_held(&k->lock);
@@ -735,7 +734,6 @@ void thread_ready(thread_t *th)
 void thread_ready_head(thread_t *th)
 {
 	struct kthread *k;
-	thread_t *oldestth;
 
     assert(k->rq_head > k->rq_tail);
 	k = getk();
