@@ -238,7 +238,7 @@ static void update_oldest_tsc(struct kthread *k)
 	/* find the oldest thread in the runqueue */
 	if (load_acquire(&k->rq_head) != k->rq_tail) {
 		th = k->rq[k->rq_tail % RUNTIME_RQ_SIZE];
-		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
+		if(k->q_ptrs->oldest_tsc < th->ready_tsc) ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	}
 }
 
@@ -247,9 +247,6 @@ static uint32_t drain_threads(struct kthread *k, struct list_head *l, uint32_t n
 {
 	uint32_t i;//, rq_head;//, rq_tail;
 	thread_t *th;
-
-	// rq_head = load_acquire(&k->rq_head);
-        // rq_tail = k->rq_tail;
 
 	for (i = 0; i < nr; i++) {
         if(k->rq_head > 0) {
@@ -372,7 +369,6 @@ static __noreturn __noinline void schedule(void)
 	struct kthread *r = NULL, *l = myk();
 	uint64_t start_tsc;
 	thread_t *th = NULL;
-	unsigned int start_idx;
 	unsigned int iters = 0;
 	int i, sibling;
 
@@ -449,6 +445,7 @@ again:
 		goto done;
 
 	// /* try to steal from every kthread */
+	// unsigned int start_idx;
 	// start_idx = rand_crc32c((uintptr_t)l);
 	// for (i = 0; i < maxks; i++) {
 	// 	int idx = (start_idx + i) % maxks;
@@ -659,7 +656,7 @@ void thread_ready_locked(thread_t *th)
 	thread_ready_prepare(k, th);
     heap_insert(k, th);
 	if (k->rq_head - k->rq_tail == 1)
-		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
+		if(k->q_ptrs->oldest_tsc < th->ready_tsc) ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 }
 
 /**
@@ -686,7 +683,7 @@ void thread_ready_head_locked(thread_t *th)
     th->priority = 0;
     heap_insert(k, th);
     th->priority = actual_priority;
-	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
+	if(k->q_ptrs->oldest_tsc < th->ready_tsc) ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 }
 
 /**
@@ -720,7 +717,7 @@ void thread_ready(thread_t *th)
 	// k->rq[k->rq_head % RUNTIME_RQ_SIZE] = th;
 	// store_release(&k->rq_head, k->rq_head + 1);
 	if (k->rq_head - load_acquire(&k->rq_tail) == 1)
-		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
+		if(k->q_ptrs->oldest_tsc < th->ready_tsc) ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	// ACCESS_ONCE(k->q_ptrs->rq_head)++;
 	putk();
 }
@@ -747,7 +744,7 @@ void thread_ready_head(thread_t *th)
     heap_insert(k, th);
     th->priority = actual_priority;
 	spin_unlock(&k->lock);
-	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
+	if(k->q_ptrs->oldest_tsc < th->ready_tsc) ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	putk();
 }
 
@@ -973,7 +970,7 @@ static __noreturn void schedule_start(void)
 	 * schedule().
 	 */
 	if (k->q_ptrs->oldest_tsc == 0)
-		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = UINT64_MAX;
+		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = 0;
 	ACCESS_ONCE(k->parked) = true;
 	kthread_wait_to_attach();
 	perthread_store(last_tsc, rdtsc());
