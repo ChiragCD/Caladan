@@ -187,15 +187,19 @@ static void update_oldest_tsc(struct kthread *k)
 /* drain up to nr threads from k's runqueue into list l */
 static uint32_t drain_threads(struct kthread *k, struct list_head *l, uint32_t nr, bool update_tail)
 {
-	uint32_t i, rq_head, rq_tail;
+	uint32_t i, rq_head;//, rq_tail;
 	thread_t *th;
 
-	rq_head = load_acquire(&k->rq_head);
-	rq_tail = k->rq_tail;
+	// rq_head = load_acquire(&k->rq_head);
+	// rq_tail = k->rq_tail;
+
+    rq_head = k->rq_head;
 
 	for (i = 0; i < nr; i++) {
-		if (likely(wraps_lt(rq_tail, rq_head))) {
-			th = k->rq[rq_tail++ % RUNTIME_RQ_SIZE];
+        if(k->rq_head > 0) {
+            th = k->rq[k->rq_head--];
+		// if (likely(wraps_lt(rq_tail, rq_head))) {
+		// 	th = k->rq[rq_tail++ % RUNTIME_RQ_SIZE];
 		} else {
 			th = list_pop(&k->rq_overflow, thread_t, link);
 			if (!th)
@@ -205,8 +209,8 @@ static uint32_t drain_threads(struct kthread *k, struct list_head *l, uint32_t n
 	}
 
 	if (update_tail) {
-		k->rq_tail = rq_tail;
-		ACCESS_ONCE(k->q_ptrs->rq_tail) += i;
+		// k->rq_tail = rq_tail;
+		// ACCESS_ONCE(k->q_ptrs->rq_tail) += i;
 	}
 
 	return i;
