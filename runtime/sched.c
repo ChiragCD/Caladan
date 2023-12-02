@@ -391,19 +391,19 @@ again:
 		goto done;
 	}
 
-	/* then try to steal from a sibling kthread */
-	sibling = cpu_map[l->curr_cpu].sibling_core;
-	r = cpu_map[sibling].recent_kthread;
-	if (r && r != l && steal_work(l, r))
-		goto done;
+	// /* then try to steal from a sibling kthread */
+	// sibling = cpu_map[l->curr_cpu].sibling_core;
+	// r = cpu_map[sibling].recent_kthread;
+	// if (r && r != l && steal_work(l, r))
+	// 	goto done;
 
-	/* try to steal from every kthread */
-	start_idx = rand_crc32c((uintptr_t)l);
-	for (i = 0; i < maxks; i++) {
-		int idx = (start_idx + i) % maxks;
-		if (ks[idx] != l && steal_work(l, ks[idx]))
-			goto done;
-	}
+	// /* try to steal from every kthread */
+	// start_idx = rand_crc32c((uintptr_t)l);
+	// for (i = 0; i < maxks; i++) {
+	// 	int idx = (start_idx + i) % maxks;
+	// 	if (ks[idx] != l && steal_work(l, ks[idx]))
+	// 		goto done;
+	// }
 
 	/* recheck for local softirqs one last time */
 	if (softirq_run_locked(l)) {
