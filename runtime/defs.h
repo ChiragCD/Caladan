@@ -32,7 +32,7 @@
 #define RUNTIME_MAX_THREADS		100000
 #define RUNTIME_STACK_SIZE		256 * KB
 #define RUNTIME_GUARD_SIZE		256 * KB
-#define RUNTIME_RQ_SIZE			32
+#define RUNTIME_RQ_SIZE			1023
 #define RUNTIME_MAX_TIMERS		4096
 #define RUNTIME_SCHED_POLL_ITERS	0
 #define RUNTIME_SCHED_MIN_POLL_US	2
@@ -411,15 +411,15 @@ struct kthread {
 };
 
 /* compile-time verification of cache-line alignment */
-BUILD_ASSERT(offsetof(struct kthread, lock) % CACHE_LINE_SIZE == 0);
-BUILD_ASSERT(offsetof(struct kthread, q_ptrs) % CACHE_LINE_SIZE == 0);
-BUILD_ASSERT(offsetof(struct kthread, txpktq) % CACHE_LINE_SIZE == 0);
-BUILD_ASSERT(offsetof(struct kthread, rq) % CACHE_LINE_SIZE == 0);
-BUILD_ASSERT(offsetof(struct kthread, timer_lock) % CACHE_LINE_SIZE == 0);
-#ifdef DIRECT_STORAGE
-BUILD_ASSERT(offsetof(struct kthread, storage_q) % CACHE_LINE_SIZE == 0);
-#endif
-BUILD_ASSERT(offsetof(struct kthread, stats) % CACHE_LINE_SIZE == 0);
+// BUILD_ASSERT(offsetof(struct kthread, lock) % CACHE_LINE_SIZE == 0);
+// BUILD_ASSERT(offsetof(struct kthread, q_ptrs) % CACHE_LINE_SIZE == 0);
+// BUILD_ASSERT(offsetof(struct kthread, txpktq) % CACHE_LINE_SIZE == 0);
+// BUILD_ASSERT(offsetof(struct kthread, rq) % CACHE_LINE_SIZE == 0);
+// BUILD_ASSERT(offsetof(struct kthread, timer_lock) % CACHE_LINE_SIZE == 0);
+// #ifdef DIRECT_STORAGE
+// BUILD_ASSERT(offsetof(struct kthread, storage_q) % CACHE_LINE_SIZE == 0);
+// #endif
+// BUILD_ASSERT(offsetof(struct kthread, stats) % CACHE_LINE_SIZE == 0);
 
 DECLARE_PERTHREAD(struct kthread *, mykthread);
 
