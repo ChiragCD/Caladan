@@ -191,7 +191,7 @@ static void update_oldest_tsc(struct kthread *k)
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	}
 #elif defined(PRIORITY_FCFS)
-    ACCESS_ONCE(k->q_ptrs->oldest_tsc) = k->rheap[0]->ready_tsc;
+    if(k->rheap_size != 0) ACCESS_ONCE(k->q_ptrs->oldest_tsc) = k->rheap[0]->ready_tsc;
 #endif
 }
 
@@ -747,12 +747,12 @@ void thread_ready_head_locked(thread_t *th)
 		k->rq_head--;
 		STAT(RQ_OVERFLOW)++;
 	}
-	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
 #elif defined(PRIORITY_FCFS)
-    th->ready_tsc = 0;
+    th->ready_tsc &= ((uint64_t)-1) >> 4;
     insert_heap(th);
 #endif
+	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 }
 
 /**
@@ -790,6 +790,7 @@ void thread_ready(thread_t *th)
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
 #elif defined(PRIORITY_FCFS)
     insert_heap(th);
+    if(k->rheap_size == 1) ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 #endif
 	putk();
 }
@@ -818,12 +819,12 @@ void thread_ready_head(thread_t *th)
 		k->rq_head--;
 		STAT(RQ_OVERFLOW)++;
 	}
-	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	ACCESS_ONCE(k->q_ptrs->rq_head)++;
 #elif defined(PRIORITY_FCFS)
-    th->ready_tsc = 0;
+    th->ready_tsc &= ((uint64_t)-1) >> 4;
     insert_heap(th);
 #endif
+	ACCESS_ONCE(k->q_ptrs->oldest_tsc) = th->ready_tsc;
 	spin_unlock(&k->lock);
 	putk();
 }
