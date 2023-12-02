@@ -616,7 +616,7 @@ void thread_park_and_preempt_enable(void)
 	enter_schedule(curth);
 }
 
-void set_thread_priority(thread_t * th) {
+void set_default_thread_priority(thread_t * th) {
     if(th->priority == (uint)-1) th->priority = th->ready_tsc;       // FCFS
 }
 
@@ -628,7 +628,7 @@ static void thread_ready_prepare(struct kthread *k, thread_t *th)
 	/* prepare thread to be runnable */
 	th->thread_ready = true;
 	th->ready_tsc = rdtsc();
-    set_thread_priority(th);
+    set_default_thread_priority(th);
 	if (cores_have_affinity(th->last_cpu, k->curr_cpu))
 		STAT(LOCAL_WAKES)++;
 	else
