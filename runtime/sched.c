@@ -275,7 +275,6 @@ static void merge_runqueues(struct kthread *l, uint32_t lsize, struct kthread *r
 
 static bool steal_work(struct kthread *l, struct kthread *r)
 {
-#ifdef ORIGINAL_ALGO
 	uint64_t now_tsc = rdtsc();
 	uint32_t lsize, rsize, num_to_steal = 0;
 
@@ -296,6 +295,7 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 	}
 #endif
 
+#ifdef ORIGINAL_ALGO
 	/* first try to steal directly from the runqueue */
 	lsize = l->q_ptrs->rq_head - l->q_ptrs->rq_tail;
 	rsize = ACCESS_ONCE(r->q_ptrs->rq_head) - r->q_ptrs->rq_tail;
@@ -305,6 +305,7 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 		merge_runqueues(l, lsize, r, num_to_steal);
 		return true;
 	}
+#endif
 
 	/* otherwise try to steal softirqs */
 	if (softirq_run_locked(r)) {
@@ -314,7 +315,6 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 	}
 
 	spin_unlock(&r->lock);
-#endif
 	return false;
 }
 
@@ -468,7 +468,6 @@ again:
 		goto done;
 	}
 
-#ifdef ORIGINAL_ALGO
 	/* then try to steal from a sibling kthread */
 	sibling = cpu_map[l->curr_cpu].sibling_core;
 	r = cpu_map[sibling].recent_kthread;
@@ -482,7 +481,6 @@ again:
 		if (ks[idx] != l && steal_work(l, ks[idx]))
 			goto done;
 	}
-#endif
 
 	/* recheck for local softirqs one last time */
 	if (softirq_run_locked(l)) {
@@ -764,12 +762,12 @@ void thread_ready_head_locked(thread_t *th)
 void thread_ready(thread_t *th)
 {
 	struct kthread *k;
-	uint32_t rq_tail;
 
 	k = getk();
 	thread_ready_prepare(k, th);
 
 #ifdef ORIGINAL_ALGO
+	uint32_t rq_tail;
 	rq_tail = load_acquire(&k->rq_tail);
 	if (unlikely(k->rq_head - rq_tail >= RUNTIME_RQ_SIZE ||
 	             !list_empty_volatile(&k->rq_overflow))) {
