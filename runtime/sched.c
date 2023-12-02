@@ -442,8 +442,8 @@ done:
 	/* pop off a thread and run it */
 	assert(l->rq_head != l->rq_tail);
 	th = l->rq[l->rq_tail % RUNTIME_RQ_SIZE];
+    l->rq_head--;
     for(int i = 0; i < l->rq_head; i++) l->rq[i] = l->rq[i+1];
-    l->rq_head = (l->rq_head-1)%RUNTIME_RQ_SIZE;
     l->rq[l->rq_head] = NULL;
 
 	/* move overflow tasks into the runqueue */
@@ -507,8 +507,8 @@ static __always_inline void enter_schedule(thread_t *curth)
 
 	/* pop the next runnable thread from the queue */
 	th = k->rq[k->rq_tail % RUNTIME_RQ_SIZE];
+    k->rq_head--;
     for(int i = 0; i < k->rq_head; i++) k->rq[i] = k->rq[i+1];
-    k->rq_head = (k->rq_head-1)%RUNTIME_RQ_SIZE;
     k->rq[k->rq_head] = NULL;
 
 	/* move overflow tasks into the runqueue */
@@ -647,6 +647,7 @@ void thread_ready_head_locked(thread_t *th)
 	// oldestth = k->rq[--k->rq_tail % RUNTIME_RQ_SIZE];
 	k->rq[k->rq_tail % RUNTIME_RQ_SIZE] = th;
     if(k->rq_head < RUNTIME_RQ_SIZE) {
+        k->rq[k->rq_head] = oldestth;
         k->rq_head++;
 	    ACCESS_ONCE(k->q_ptrs->rq_head)++;
     }
