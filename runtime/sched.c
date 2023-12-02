@@ -505,8 +505,11 @@ static __always_inline void enter_schedule(thread_t *curth)
 	perthread_get_stable(last_tsc) = now_tsc;
 
 	/* pop the next runnable thread from the queue */
-	th = k->rq[k->rq_tail++ % RUNTIME_RQ_SIZE];
-	ACCESS_ONCE(k->q_ptrs->rq_tail)++;
+	th = k->rq[k->rq_tail % RUNTIME_RQ_SIZE];
+    for(int i = 0; i < k->rq_head; i++) k->rq[i] = k->rq[i+1];
+    k->rq_head = (k->rq_head--)%RUNTIME_RQ_SIZE;
+    k->rq[k->rq_head] = NULL;
+	ACCESS_ONCE(k->q_ptrs->rq_tail);
 
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&k->rq_overflow)))
