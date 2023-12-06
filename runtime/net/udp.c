@@ -71,6 +71,7 @@ struct udpconn {
 
 void set_thread_priority(thread_t * th, struct mbuf * m) {
     th->priority = (uint) -1;       // Default
+    th->priority = ((uint64_t *) m->data)[3];
 }
 
 /* handles ingress packets for UDP sockets */
